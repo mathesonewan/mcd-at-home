@@ -122,7 +122,7 @@ No frameworks. No build step. No ORM.
 
 ## Repository structure
 
-mcd-at-home/
+'''mcd-at-home/
 ├─ app/
 │  ├─ server.js
 │  ├─ db.js
@@ -140,7 +140,7 @@ mcd-at-home/
 ├─ docker-compose.yml
 ├─ .dockerignore
 └─ README.md
-
+'''
 ---
 
 ## Configuration
