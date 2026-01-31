@@ -122,25 +122,8 @@ No frameworks. No build step. No ORM.
 
 ## Repository structure
 
-'''mcd-at-home/
-├─ app/
-│  ├─ server.js
-│  ├─ db.js
-│  ├─ schema.sql
-│  ├─ package.json
-│  └─ public/
-│     ├─ index.html
-│     ├─ app.js
-│     └─ styles.css
-│
-├─ data/           # SQLite DB lives here at runtime (not committed)
-│  └─ .gitkeep
-│
-├─ Dockerfile
-├─ docker-compose.yml
-├─ .dockerignore
-└─ README.md
-'''
+The repository uses a flat root layout. app/ contains all runtime code. data/ is a sibling directory used solely for SQLite persistence and is not committed.
+
 ---
 
 ## Configuration
