@@ -1,5 +1,5 @@
 # Implementation Plan — mcd-at-home
-App name: **Mum Says There’s McDonald’s at Home**  
+App name: **There's McDonalds at Home**  
 Repo: `mcd-at-home`
 
 Purpose: Build a tiny LAN-only meal planner that reduces dinner decision friction and produces a shopping list. Keep scope minimal and predictable.

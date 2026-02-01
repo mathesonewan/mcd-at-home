@@ -1,1 +1,203 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>There's McDonalds at Home</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="bg">
+      <span class="orb orb-one"></span>
+      <span class="orb orb-two"></span>
+      <span class="orb orb-three"></span>
+    </div>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Weekly dinner planner</p>
+        <h1>There's McDonalds at Home</h1>
+      </div>
+      <div class="status-controls">
+        <button class="ghost" id="clear-week">Clear week</button>
+        <div class="status" id="status">Ready</div>
+      </div>
+    </header>
 
+    <nav class="tabs" aria-label="Primary">
+      <button class="tab is-active" data-view="planner">Planner</button>
+      <button class="tab" data-view="shopping">Shopping List</button>
+      <button class="tab" data-view="meals">Meals</button>
+    </nav>
+
+    <main class="content">
+      <section id="view-planner" class="view">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Weekly Plan</h2>
+              <p id="week-label" class="subtle"></p>
+            </div>
+            <div class="actions">
+              <button class="ghost" id="prev-week">Prev week</button>
+              <button class="ghost" id="next-week">Next week</button>
+            </div>
+          </div>
+          <div id="planner-warning" class="notice hidden"></div>
+          <div id="planner-grid" class="planner-grid"></div>
+        </div>
+
+        <div class="panel totals">
+          <h3>Nutrition Totals</h3>
+          <div class="totals-grid">
+            <div>
+              <span class="metric-label">Calories</span>
+              <span class="metric-value" id="total-kcal">0</span>
+            </div>
+            <div>
+              <span class="metric-label">Protein</span>
+              <span class="metric-value" id="total-protein">0 g</span>
+            </div>
+            <div>
+              <span class="metric-label">Carbs</span>
+              <span class="metric-value" id="total-carbs">0 g</span>
+            </div>
+            <div>
+              <span class="metric-label">Fat</span>
+              <span class="metric-value" id="total-fat">0 g</span>
+            </div>
+            <div>
+              <span class="metric-label">Fibre</span>
+              <span class="metric-value" id="total-fibre">0 g</span>
+            </div>
+          </div>
+          <p id="nutrition-note" class="subtle"></p>
+        </div>
+      </section>
+
+      <section id="view-shopping" class="view hidden">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Shopping List</h2>
+              <p class="subtle" id="shopping-week"></p>
+            </div>
+            <div class="actions">
+              <button class="ghost" id="copy-list">Copy list</button>
+              <button class="ghost" id="print-list">Print</button>
+            </div>
+          </div>
+          <div id="shopping-list" class="shopping-list"></div>
+        </div>
+      </section>
+
+      <section id="view-meals" class="view hidden">
+        <div class="meals-layout">
+          <div class="panel meal-list">
+            <div class="panel-header">
+              <h2>Meals</h2>
+              <button class="ghost" id="new-meal">New meal</button>
+            </div>
+            <div id="meals-list"></div>
+          </div>
+
+          <div class="panel meal-editor">
+            <h2 id="meal-editor-title">Create meal</h2>
+            <form id="meal-form">
+              <label>
+                <span>Name</span>
+                <input type="text" name="name" required />
+              </label>
+
+              <label>
+                <span>Tags (comma separated)</span>
+                <input type="text" name="tags" />
+              </label>
+
+              <div class="field-group">
+                <div class="field-header">
+                  <span>Ingredients</span>
+                  <button class="ghost" type="button" id="add-ingredient">
+                    Add ingredient
+                  </button>
+                </div>
+                <div id="ingredients"></div>
+              </div>
+
+              <label>
+                <span>Method steps (one per line)</span>
+                <textarea name="method_steps" rows="5"></textarea>
+              </label>
+
+              <div class="field-group">
+                <div class="field-header">
+                  <span>Nutrition per serving</span>
+                  <label class="inline">
+                    <input type="checkbox" id="nutrition-unknown" />
+                    Unknown
+                  </label>
+                </div>
+                <div class="nutrition-grid">
+                  <label>
+                    <span>Kcal</span>
+                    <input type="number" step="1" name="nutrition_kcal" />
+                  </label>
+                  <label>
+                    <span>Protein (g)</span>
+                    <input type="number" step="0.1" name="nutrition_protein" />
+                  </label>
+                  <label>
+                    <span>Carbs (g)</span>
+                    <input type="number" step="0.1" name="nutrition_carbs" />
+                  </label>
+                  <label>
+                    <span>Fat (g)</span>
+                    <input type="number" step="0.1" name="nutrition_fat" />
+                  </label>
+                  <label>
+                    <span>Fibre (g)</span>
+                    <input type="number" step="0.1" name="nutrition_fibre" />
+                  </label>
+                  <label>
+                    <span>Source note</span>
+                    <input type="text" name="nutrition_source" />
+                  </label>
+                </div>
+              </div>
+
+              <div class="field-group">
+                <div class="field-header">
+                  <span>Leftover follow-up</span>
+                </div>
+                <div class="followup-grid">
+                  <label>
+                    <span>Follow-up meal</span>
+                    <select name="followup_meal" id="followup-meal"></select>
+                  </label>
+                  <label>
+                    <span>Offset days</span>
+                    <input type="number" min="1" max="6" name="followup_offset" />
+                  </label>
+                  <label class="inline">
+                    <input type="checkbox" name="followup_required" />
+                    Required
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button type="submit" class="primary" id="save-meal">
+                  Save meal
+                </button>
+                <button type="button" class="ghost danger" id="delete-meal">
+                  Delete
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

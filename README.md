@@ -1,4 +1,4 @@
-# 🍔 Mum Says There’s McDonald’s at Home
+# 🍔 There's McDonalds at Home
 
 *A tiny, LAN-only meal planner to stop us asking “what should we have for dinner?” every night and then eating garbage.*
 
