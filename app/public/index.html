@@ -18,6 +18,7 @@
         <h1>There's McDonalds at Home</h1>
       </div>
       <div class="status-controls">
+        <button class="ghost" id="theme-toggle" type="button">Dark mode</button>
         <button class="ghost" id="clear-week">Clear week</button>
         <div class="status" id="status">Ready</div>
       </div>
@@ -43,7 +44,7 @@
             </div>
           </div>
           <div id="planner-warning" class="notice hidden"></div>
-          <div id="planner-grid" class="planner-grid"></div>
+          <div id="planner-grid" class="planner-rows"></div>
         </div>
 
         <div class="panel totals">
@@ -52,6 +53,10 @@
             <div>
               <span class="metric-label">Calories</span>
               <span class="metric-value" id="total-kcal">0</span>
+            </div>
+            <div>
+              <span class="metric-label">Avg / day</span>
+              <span class="metric-value" id="avg-kcal">0</span>
             </div>
             <div>
               <span class="metric-label">Protein</span>
@@ -71,6 +76,39 @@
             </div>
           </div>
           <p id="nutrition-note" class="subtle"></p>
+          <div class="macro-split">
+            <h4 class="section-title">Macro split</h4>
+            <div class="macro-split-body">
+              <div
+                class="macro-chart"
+                id="macro-chart"
+                role="img"
+                aria-label="Macro split: Protein 0%, Carbs 0%, Fat 0%, Fibre 0%"
+              ></div>
+              <div class="macro-legend">
+                <div class="macro-item">
+                  <span class="macro-swatch protein"></span>
+                  <span class="macro-name">Protein</span>
+                  <span class="macro-value" id="macro-protein">0% · 0 g</span>
+                </div>
+                <div class="macro-item">
+                  <span class="macro-swatch carbs"></span>
+                  <span class="macro-name">Carbs</span>
+                  <span class="macro-value" id="macro-carbs">0% · 0 g</span>
+                </div>
+                <div class="macro-item">
+                  <span class="macro-swatch fat"></span>
+                  <span class="macro-name">Fat</span>
+                  <span class="macro-value" id="macro-fat">0% · 0 g</span>
+                </div>
+                <div class="macro-item">
+                  <span class="macro-swatch fibre"></span>
+                  <span class="macro-name">Fibre</span>
+                  <span class="macro-value" id="macro-fibre">0% · 0 g</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -95,7 +133,22 @@
           <div class="panel meal-list">
             <div class="panel-header">
               <h2>Meals</h2>
-              <button class="ghost" id="new-meal">New meal</button>
+              <div class="actions">
+                <button class="ghost" id="new-meal">New meal</button>
+              </div>
+            </div>
+            <div class="bulk-actions">
+              <div class="bulk-left">
+                <label class="bulk-select">
+                  <input type="checkbox" id="select-all-meals" />
+                  Select all
+                </label>
+                <span class="bulk-count" id="bulk-count">0 selected</span>
+              </div>
+              <div class="bulk-right">
+                <button class="ghost" id="bulk-tags">Edit tags</button>
+                <button class="ghost danger" id="bulk-delete">Delete</button>
+              </div>
             </div>
             <div id="meals-list"></div>
           </div>
@@ -106,6 +159,14 @@
               <label>
                 <span>Name</span>
                 <input type="text" name="name" required />
+              </label>
+
+              <label>
+                <span>Meal type</span>
+                <select name="meal_type" id="meal-type">
+                  <option value="lunch">Lunch</option>
+                  <option value="dinner">Dinner</option>
+                </select>
               </label>
 
               <label>

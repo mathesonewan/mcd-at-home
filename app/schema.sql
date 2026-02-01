@@ -3,6 +3,7 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS meals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
+  meal_type TEXT NOT NULL DEFAULT 'dinner',
   tags TEXT,
   method_steps TEXT,
   nutrition_unknown INTEGER NOT NULL DEFAULT 0,
@@ -35,7 +36,8 @@ CREATE INDEX IF NOT EXISTS idx_meal_ingredients_meal_id ON meal_ingredients(meal
 CREATE TABLE IF NOT EXISTS week_meals (
   week_start TEXT NOT NULL,
   day_index INTEGER NOT NULL,
+  meal_type TEXT NOT NULL DEFAULT 'dinner',
   meal_id INTEGER,
-  PRIMARY KEY (week_start, day_index),
+  PRIMARY KEY (week_start, day_index, meal_type),
   FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE SET NULL
 );

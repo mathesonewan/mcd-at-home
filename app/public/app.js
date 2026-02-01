@@ -5,10 +5,22 @@ const state = {
   activeView: "planner",
   currentMealId: null,
   saveTimer: null,
+  mealPicker: null,
+  tagFilters: {
+    lunch: [],
+    dinner: [],
+  },
+  selectedMealIds: new Set(),
 };
+
+const mealTypes = [
+  { key: "lunch", label: "Lunch" },
+  { key: "dinner", label: "Dinner" },
+];
 
 const elements = {
   status: document.getElementById("status"),
+  themeToggle: document.getElementById("theme-toggle"),
   clearWeek: document.getElementById("clear-week"),
   tabs: document.querySelectorAll(".tab"),
   views: {
@@ -23,11 +35,19 @@ const elements = {
   nextWeek: document.getElementById("next-week"),
   totals: {
     kcal: document.getElementById("total-kcal"),
+    avgKcal: document.getElementById("avg-kcal"),
     protein: document.getElementById("total-protein"),
     carbs: document.getElementById("total-carbs"),
     fat: document.getElementById("total-fat"),
     fibre: document.getElementById("total-fibre"),
     note: document.getElementById("nutrition-note"),
+    macroChart: document.getElementById("macro-chart"),
+    macro: {
+      protein: document.getElementById("macro-protein"),
+      carbs: document.getElementById("macro-carbs"),
+      fat: document.getElementById("macro-fat"),
+      fibre: document.getElementById("macro-fibre"),
+    },
   },
   shopping: {
     week: document.getElementById("shopping-week"),
@@ -41,10 +61,15 @@ const elements = {
     form: document.getElementById("meal-form"),
     title: document.getElementById("meal-editor-title"),
     delete: document.getElementById("delete-meal"),
+    mealType: document.getElementById("meal-type"),
     ingredients: document.getElementById("ingredients"),
     addIngredient: document.getElementById("add-ingredient"),
     nutritionUnknown: document.getElementById("nutrition-unknown"),
     followupMeal: document.getElementById("followup-meal"),
+    selectAll: document.getElementById("select-all-meals"),
+    bulkCount: document.getElementById("bulk-count"),
+    bulkTags: document.getElementById("bulk-tags"),
+    bulkDelete: document.getElementById("bulk-delete"),
   },
 };
 
@@ -59,9 +84,11 @@ const dayNames = [
 ];
 
 document.addEventListener("DOMContentLoaded", () => {
+  initTheme();
   bindNavigation();
   bindPlannerControls();
   bindShoppingControls();
+  bindThemeControls();
   bindMealForm();
   loadAll();
 });
@@ -86,6 +113,10 @@ function bindShoppingControls() {
   elements.shopping.print.addEventListener("click", () => window.print());
 }
 
+function bindThemeControls() {
+  elements.themeToggle.addEventListener("click", toggleTheme);
+}
+
 function bindMealForm() {
   elements.meals.newButton.addEventListener("click", () => setMealForm());
   elements.meals.addIngredient.addEventListener("click", () =>
@@ -94,7 +125,13 @@ function bindMealForm() {
   elements.meals.form.addEventListener("submit", handleMealSubmit);
   elements.meals.delete.addEventListener("click", handleMealDelete);
   elements.meals.nutritionUnknown.addEventListener("change", toggleNutrition);
+  elements.meals.mealType.addEventListener("change", () =>
+    renderFollowupOptions()
+  );
   elements.clearWeek.addEventListener("click", handleClearWeek);
+  elements.meals.selectAll.addEventListener("change", handleSelectAllMeals);
+  elements.meals.bulkDelete.addEventListener("click", handleBulkDelete);
+  elements.meals.bulkTags.addEventListener("click", handleBulkTags);
 }
 
 async function loadAll() {
@@ -109,6 +146,7 @@ async function loadMeals() {
   const data = await apiGet("/api/meals");
   if (!data) return;
   state.meals = data;
+  pruneSelectedMeals();
   renderMealsList();
   renderFollowupOptions();
 }
@@ -135,50 +173,252 @@ function renderPlanner() {
   elements.weekLabel.textContent = formatWeekRange(state.weekStart);
   elements.plannerGrid.innerHTML = "";
   const weekDates = getWeekDates(state.weekStart);
-  state.week.days.forEach((day, index) => {
-    const card = document.createElement("div");
-    card.className = "planner-card";
+  mealTypes.forEach((mealType) => {
+    const row = document.createElement("div");
+    row.className = "planner-row";
 
-    const title = document.createElement("strong");
-    title.textContent = `${dayNames[index]} · ${formatShortDate(weekDates[index])}`;
-    card.appendChild(title);
+    const rowHeader = document.createElement("div");
+    rowHeader.className = "planner-row-header";
+    rowHeader.textContent = mealType.label;
+    row.appendChild(rowHeader);
 
-    const select = document.createElement("select");
-    const emptyOption = document.createElement("option");
-    emptyOption.value = "";
-    emptyOption.textContent = "—";
-    select.appendChild(emptyOption);
+    const pickerPanel = document.createElement("div");
+    pickerPanel.className = "meal-picker-inline";
+    const isOpen =
+      state.mealPicker && state.mealPicker.mealType === mealType.key;
+    if (!isOpen) {
+      pickerPanel.classList.add("hidden");
+    } else {
+      const header = document.createElement("div");
+      header.className = "meal-picker-header";
+      const titleWrap = document.createElement("div");
+      const eyebrow = document.createElement("p");
+      eyebrow.className = "meal-picker-eyebrow";
+      eyebrow.textContent = "Choose meal";
+      const title = document.createElement("h4");
+      title.textContent = `${mealType.label} · ${dayNames[state.mealPicker.dayIndex]} · ${formatShortDate(
+        state.mealPicker.date
+      )}`;
+      titleWrap.appendChild(eyebrow);
+      titleWrap.appendChild(title);
+      header.appendChild(titleWrap);
 
-    state.meals.forEach((meal) => {
-      const option = document.createElement("option");
-      option.value = String(meal.id);
-      option.textContent = meal.name;
-      select.appendChild(option);
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "ghost";
+      close.textContent = "Close";
+      close.addEventListener("click", closeMealPicker);
+      header.appendChild(close);
+      pickerPanel.appendChild(header);
+
+      const actions = document.createElement("div");
+      actions.className = "meal-picker-actions";
+      const clear = document.createElement("button");
+      clear.type = "button";
+      clear.className = "ghost danger";
+      clear.textContent = "Clear selection";
+      clear.addEventListener("click", () => {
+        applyMealSelection(
+          state.mealPicker.dayIndex,
+          state.mealPicker.mealType,
+          null
+        );
+        closeMealPicker();
+      });
+      actions.appendChild(clear);
+      pickerPanel.appendChild(actions);
+
+      const filterRow = document.createElement("div");
+      filterRow.className = "meal-tag-filter";
+      const filterLabel = document.createElement("span");
+      filterLabel.textContent = "Filter by tag";
+      filterRow.appendChild(filterLabel);
+
+      const clearFilters = document.createElement("button");
+      clearFilters.type = "button";
+      clearFilters.className = "ghost";
+      clearFilters.textContent = "Clear tags";
+      clearFilters.addEventListener("click", () => {
+        state.tagFilters[mealType.key] = [];
+        renderPlanner();
+      });
+      filterRow.appendChild(clearFilters);
+      pickerPanel.appendChild(filterRow);
+
+      const tagChips = document.createElement("div");
+      tagChips.className = "meal-tag-chips";
+      renderTagChips(tagChips, mealType.key);
+      pickerPanel.appendChild(tagChips);
+
+      const buckets = document.createElement("div");
+      buckets.className = "meal-picker-buckets";
+      renderMealPickerBuckets(buckets, state.mealPicker.dayIndex, mealType.key);
+      pickerPanel.appendChild(buckets);
+    }
+
+    row.appendChild(pickerPanel);
+
+    const rowGrid = document.createElement("div");
+    rowGrid.className = "planner-grid";
+
+    state.week.days.forEach((day, index) => {
+      const card = document.createElement("div");
+      card.className = "planner-card";
+
+      const title = document.createElement("strong");
+      title.textContent = `${dayNames[index]} · ${formatShortDate(
+        weekDates[index]
+      )}`;
+      card.appendChild(title);
+
+      const selectedMealId = day[`${mealType.key}_meal_id`] ?? null;
+      const selectedMeal = selectedMealId
+        ? state.meals.find((meal) => meal.id === selectedMealId)
+        : null;
+
+      const selectedWrap = document.createElement("div");
+      selectedWrap.className = "meal-selected";
+      const selectedName = document.createElement("span");
+      selectedName.textContent = selectedMeal?.name ?? "No meal selected";
+      selectedWrap.appendChild(selectedName);
+
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "ghost";
+      toggle.textContent = selectedMeal ? "Change" : "Choose";
+      toggle.addEventListener("click", () =>
+        openMealPicker(index, mealType.key, weekDates[index])
+      );
+      selectedWrap.appendChild(toggle);
+      card.appendChild(selectedWrap);
+
+      rowGrid.appendChild(card);
     });
 
-    select.value = day.meal_id ? String(day.meal_id) : "";
-    select.addEventListener("change", (event) => {
-      const value = event.target.value;
-      const mealId = value ? Number(value) : null;
-      applyMealSelection(index, mealId);
-    });
-
-    card.appendChild(select);
-    elements.plannerGrid.appendChild(card);
+    row.appendChild(rowGrid);
+    elements.plannerGrid.appendChild(row);
   });
 
   renderNutritionTotals();
 }
 
-function applyMealSelection(dayIndex, mealId) {
+function openMealPicker(dayIndex, mealType, date) {
+  state.mealPicker = { dayIndex, mealType, date };
+  renderPlanner();
+}
+
+function closeMealPicker() {
+  state.mealPicker = null;
+  renderPlanner();
+}
+
+function renderMealPickerBuckets(container, dayIndex, mealType) {
+  container.innerHTML = "";
+  const mealsForType = state.meals.filter(
+    (meal) => getMealType(meal) === mealType
+  );
+  const selectedTags = new Set(state.tagFilters[mealType] || []);
+  if (selectedTags.size === 0) {
+    const empty = document.createElement("div");
+    empty.className = "meal-picker-empty";
+    empty.textContent = "Select a tag to see matching meals.";
+    container.appendChild(empty);
+    return;
+  }
+  const tagMap = new Map();
+  mealsForType.forEach((meal) => {
+    const tags = (meal.tags || []).filter(Boolean);
+    if (tags.length === 0) {
+      if (selectedTags.has("Untagged")) {
+        if (!tagMap.has("Untagged")) tagMap.set("Untagged", []);
+        tagMap.get("Untagged").push(meal);
+      }
+      return;
+    }
+    tags.forEach((tag) => {
+      if (!selectedTags.has(tag)) return;
+      if (!tagMap.has(tag)) tagMap.set(tag, []);
+      tagMap.get(tag).push(meal);
+    });
+  });
+
+  const sortedTags = Array.from(tagMap.keys()).sort((a, b) =>
+    a.localeCompare(b, "en", { sensitivity: "base" })
+  );
+  sortedTags.forEach((tag) => {
+    const bucket = document.createElement("div");
+    bucket.className = "meal-bucket";
+    const bucketTitle = document.createElement("div");
+    bucketTitle.className = "meal-bucket-title";
+    bucketTitle.textContent = tag;
+    bucket.appendChild(bucketTitle);
+
+    const bucketItems = document.createElement("div");
+    bucketItems.className = "meal-bucket-items";
+    tagMap.get(tag).forEach((meal) => {
+      const pill = document.createElement("button");
+      pill.type = "button";
+      pill.className = "meal-pill";
+      pill.textContent = meal.name;
+      pill.addEventListener("click", () => {
+        applyMealSelection(dayIndex, mealType, meal.id);
+        closeMealPicker();
+      });
+      bucketItems.appendChild(pill);
+    });
+    bucket.appendChild(bucketItems);
+    container.appendChild(bucket);
+  });
+}
+
+function renderTagChips(container, mealType) {
+  container.innerHTML = "";
+  const mealsForType = state.meals.filter(
+    (meal) => getMealType(meal) === mealType
+  );
+  const tagSet = new Set();
+  mealsForType.forEach((meal) => {
+    const tags = (meal.tags || []).filter(Boolean);
+    if (tags.length === 0) {
+      tagSet.add("Untagged");
+      return;
+    }
+    tags.forEach((tag) => tagSet.add(tag));
+  });
+
+  const selectedTags = new Set(state.tagFilters[mealType] || []);
+  const sortedTags = Array.from(tagSet).sort((a, b) =>
+    a.localeCompare(b, "en", { sensitivity: "base" })
+  );
+  sortedTags.forEach((tag) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "tag-chip";
+    chip.textContent = tag;
+    chip.classList.toggle("is-active", selectedTags.has(tag));
+    chip.addEventListener("click", () => {
+      const next = new Set(state.tagFilters[mealType] || []);
+      if (next.has(tag)) {
+        next.delete(tag);
+      } else {
+        next.add(tag);
+      }
+      state.tagFilters[mealType] = Array.from(next);
+      renderPlanner();
+    });
+    container.appendChild(chip);
+  });
+}
+
+function applyMealSelection(dayIndex, mealType, mealId) {
   setPlannerWarning("");
-  updateDayMeal(dayIndex, mealId);
-  handleFollowup(dayIndex, mealId);
+  updateDayMeal(dayIndex, mealType, mealId);
+  handleFollowup(dayIndex, mealType, mealId);
   renderPlanner();
   queueSaveWeek();
 }
 
-function handleFollowup(dayIndex, mealId) {
+function handleFollowup(dayIndex, mealType, mealId) {
   if (!mealId) return;
   const meal = state.meals.find((item) => item.id === mealId);
   if (!meal || !meal.leftover_followup_meal_id) return;
@@ -187,11 +427,19 @@ function handleFollowup(dayIndex, mealId) {
   const targetIndex = dayIndex + offset;
   if (targetIndex < 0 || targetIndex > 6) return;
 
-  const existing = state.week.days[targetIndex]?.meal_id ?? null;
+  const existing = state.week.days[targetIndex]?.[`${mealType}_meal_id`] ?? null;
   const followupId = meal.leftover_followup_meal_id;
+  const followupMeal = state.meals.find((item) => item.id === followupId);
+  if (followupMeal && getMealType(followupMeal) !== mealType) {
+    setPlannerWarning(
+      `${meal.name} expects a ${mealType} follow-up, but the follow-up meal is ${getMealType(
+        followupMeal
+      )}.`
+    );
+    return;
+  }
   if (!existing) {
-    updateDayMeal(targetIndex, followupId);
-    const followupMeal = state.meals.find((item) => item.id === followupId);
+    updateDayMeal(targetIndex, mealType, followupId);
     setPlannerWarning(
       `Auto-filled ${followupMeal?.name ?? "follow-up meal"} on ${dayNames[targetIndex]}.`
     );
@@ -202,11 +450,11 @@ function handleFollowup(dayIndex, mealId) {
   }
 }
 
-function updateDayMeal(dayIndex, mealId) {
+function updateDayMeal(dayIndex, mealType, mealId) {
   if (!state.week) return;
   const entry = state.week.days[dayIndex];
   if (!entry) return;
-  entry.meal_id = mealId;
+  entry[`${mealType}_meal_id`] = mealId;
 }
 
 function queueSaveWeek() {
@@ -243,29 +491,112 @@ function renderNutritionTotals() {
 
   const mealById = new Map(state.meals.map((meal) => [meal.id, meal]));
   state.week.days.forEach((day) => {
-    if (!day.meal_id) return;
-    const meal = mealById.get(day.meal_id);
-    if (!meal || meal.nutrition_unknown) return;
-    const nutrition = meal.nutrition || {};
-    totals.knownCount += 1;
-    totals.kcal += Number(nutrition.kcal || 0);
-    totals.protein += Number(nutrition.protein_g || 0);
-    totals.carbs += Number(nutrition.carbs_g || 0);
-    totals.fat += Number(nutrition.fat_g || 0);
-    totals.fibre += Number(nutrition.fibre_g || 0);
+    ["lunch_meal_id", "dinner_meal_id"].forEach((slot) => {
+      if (!day[slot]) return;
+      const meal = mealById.get(day[slot]);
+      if (!meal || meal.nutrition_unknown) return;
+      const nutrition = meal.nutrition || {};
+      totals.knownCount += 1;
+      totals.kcal += Number(nutrition.kcal || 0);
+      totals.protein += Number(nutrition.protein_g || 0);
+      totals.carbs += Number(nutrition.carbs_g || 0);
+      totals.fat += Number(nutrition.fat_g || 0);
+      totals.fibre += Number(nutrition.fibre_g || 0);
+    });
   });
 
   elements.totals.kcal.textContent = formatNumber(totals.kcal);
+  const avgKcal = totals.knownCount > 0 ? totals.kcal / 7 : 0;
+  elements.totals.avgKcal.textContent = formatNumber(avgKcal);
   elements.totals.protein.textContent = `${formatNumber(totals.protein)} g`;
   elements.totals.carbs.textContent = `${formatNumber(totals.carbs)} g`;
   elements.totals.fat.textContent = `${formatNumber(totals.fat)} g`;
   elements.totals.fibre.textContent = `${formatNumber(totals.fibre)} g`;
 
-  if (totals.knownCount < 7) {
-    elements.totals.note.textContent = `Totals based on ${totals.knownCount} of 7 meals.`;
+  renderMacroSplit(totals);
+
+  if (totals.knownCount < 14) {
+    elements.totals.note.textContent = `Totals based on ${totals.knownCount} of 14 meals.`;
   } else {
-    elements.totals.note.textContent = "Totals include all 7 meals.";
+    elements.totals.note.textContent = "Totals include all 14 meals.";
   }
+}
+
+function renderMacroSplit(totals) {
+  const macroTotal = totals.protein + totals.carbs + totals.fat + totals.fibre;
+  if (macroTotal === 0) {
+    elements.totals.macro.protein.textContent = "0% · 0 g";
+    elements.totals.macro.carbs.textContent = "0% · 0 g";
+    elements.totals.macro.fat.textContent = "0% · 0 g";
+    elements.totals.macro.fibre.textContent = "0% · 0 g";
+    ["--macro-protein-color", "--macro-carbs-color", "--macro-fat-color", "--macro-fibre-color"].forEach(
+      (token) => {
+        elements.totals.macroChart.style.setProperty(
+          token,
+          "var(--paper-dark)"
+        );
+      }
+    );
+    elements.totals.macroChart.style.setProperty("--macro-protein-stop", "0deg");
+    elements.totals.macroChart.style.setProperty("--macro-carbs-stop", "0deg");
+    elements.totals.macroChart.style.setProperty("--macro-fat-stop", "0deg");
+    elements.totals.macroChart.setAttribute(
+      "aria-label",
+      "Macro split: no data yet."
+    );
+    return;
+  }
+
+  ["--macro-protein-color", "--macro-carbs-color", "--macro-fat-color", "--macro-fibre-color"].forEach(
+    (token) => {
+      elements.totals.macroChart.style.setProperty(token, "");
+    }
+  );
+
+  const proteinPct =
+    macroTotal > 0 ? (totals.protein / macroTotal) * 100 : 0;
+  const carbsPct = macroTotal > 0 ? (totals.carbs / macroTotal) * 100 : 0;
+  const fatPct = macroTotal > 0 ? (totals.fat / macroTotal) * 100 : 0;
+  const fibrePct = macroTotal > 0 ? (totals.fibre / macroTotal) * 100 : 0;
+
+  elements.totals.macro.protein.textContent = `${formatPercent(
+    proteinPct
+  )}% · ${formatNumber(totals.protein)} g`;
+  elements.totals.macro.carbs.textContent = `${formatPercent(
+    carbsPct
+  )}% · ${formatNumber(totals.carbs)} g`;
+  elements.totals.macro.fat.textContent = `${formatPercent(fatPct)}% · ${formatNumber(
+    totals.fat
+  )} g`;
+  elements.totals.macro.fibre.textContent = `${formatPercent(
+    fibrePct
+  )}% · ${formatNumber(totals.fibre)} g`;
+
+  const proteinStop = (proteinPct / 100) * 360;
+  const carbsStop = proteinStop + (carbsPct / 100) * 360;
+  const fatStop = carbsStop + (fatPct / 100) * 360;
+
+  elements.totals.macroChart.style.setProperty(
+    "--macro-protein-stop",
+    `${proteinStop}deg`
+  );
+  elements.totals.macroChart.style.setProperty(
+    "--macro-carbs-stop",
+    `${carbsStop}deg`
+  );
+  elements.totals.macroChart.style.setProperty(
+    "--macro-fat-stop",
+    `${fatStop}deg`
+  );
+
+  elements.totals.macroChart.setAttribute(
+    "aria-label",
+    `Macro split: Protein ${formatPercent(
+      proteinPct
+    )}%, Carbs ${formatPercent(carbsPct)}%, Fat ${formatPercent(
+      fatPct
+    )}%, Fibre ${formatPercent(fibrePct)}%`
+  );
 }
 
 function renderShoppingList(items) {
@@ -311,6 +642,8 @@ function renderMealsList() {
   if (state.meals.length === 0) {
     elements.meals.list.textContent = "No meals yet. Add your first one.";
     setMealForm();
+    state.selectedMealIds.clear();
+    updateBulkUI();
     return;
   }
   state.meals.forEach((meal) => {
@@ -319,24 +652,56 @@ function renderMealsList() {
     if (state.currentMealId === meal.id) {
       item.classList.add("is-active");
     }
-    item.innerHTML = `<span>${meal.name}</span>`;
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "meal-checkbox";
+    checkbox.checked = state.selectedMealIds.has(meal.id);
+    checkbox.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        state.selectedMealIds.add(meal.id);
+      } else {
+        state.selectedMealIds.delete(meal.id);
+      }
+      updateBulkUI();
+    });
+
+    const label = document.createElement("span");
+    label.textContent = meal.name;
+
+    item.appendChild(checkbox);
+    item.appendChild(label);
     item.addEventListener("click", () => setMealForm(meal));
     elements.meals.list.appendChild(item);
   });
+  updateBulkUI();
 }
 
 function renderFollowupOptions() {
   elements.meals.followupMeal.innerHTML = "";
+  const currentValue = elements.meals.followupMeal.value;
   const empty = document.createElement("option");
   empty.value = "";
   empty.textContent = "None";
   elements.meals.followupMeal.appendChild(empty);
+  const currentType = elements.meals.form.elements.meal_type?.value || "dinner";
   state.meals.forEach((meal) => {
+    if (getMealType(meal) !== currentType) return;
     const option = document.createElement("option");
     option.value = String(meal.id);
     option.textContent = meal.name;
     elements.meals.followupMeal.appendChild(option);
   });
+  if (
+    currentValue &&
+    !Array.from(elements.meals.followupMeal.options).some(
+      (option) => option.value === currentValue
+    )
+  ) {
+    elements.meals.followupMeal.value = "";
+  }
 }
 
 function setMealForm(meal = null) {
@@ -349,6 +714,7 @@ function setMealForm(meal = null) {
     state.currentMealId = meal.id;
     elements.meals.title.textContent = "Edit meal";
     form.elements.name.value = meal.name ?? "";
+    form.elements.meal_type.value = getMealType(meal);
     form.elements.tags.value = (meal.tags || []).join(", ");
     form.elements.method_steps.value = (meal.method_steps || []).join("\n");
     elements.meals.nutritionUnknown.checked = Boolean(meal.nutrition_unknown);
@@ -376,6 +742,7 @@ function setMealForm(meal = null) {
   } else {
     state.currentMealId = null;
     elements.meals.title.textContent = "Create meal";
+    form.elements.meal_type.value = "dinner";
     elements.meals.followupMeal.value = "";
     form.elements.followup_offset.value = 1;
     form.elements.followup_required.checked = false;
@@ -384,8 +751,87 @@ function setMealForm(meal = null) {
     elements.meals.delete.disabled = true;
   }
 
+  renderFollowupOptions();
   toggleNutrition();
   renderMealsList();
+}
+
+function updateBulkUI() {
+  const total = state.meals.length;
+  const selectedCount = state.selectedMealIds.size;
+  elements.meals.bulkCount.textContent = `${selectedCount} selected`;
+  elements.meals.selectAll.checked = total > 0 && selectedCount === total;
+  elements.meals.bulkDelete.disabled = selectedCount === 0;
+  elements.meals.bulkTags.disabled = selectedCount === 0;
+}
+
+function pruneSelectedMeals() {
+  const validIds = new Set(state.meals.map((meal) => meal.id));
+  state.selectedMealIds = new Set(
+    Array.from(state.selectedMealIds).filter((id) => validIds.has(id))
+  );
+}
+
+function handleSelectAllMeals(event) {
+  if (event.target.checked) {
+    state.selectedMealIds = new Set(state.meals.map((meal) => meal.id));
+  } else {
+    state.selectedMealIds.clear();
+  }
+  renderMealsList();
+}
+
+async function handleBulkDelete() {
+  if (state.selectedMealIds.size === 0) return;
+  const confirmDelete = window.confirm(
+    `Delete ${state.selectedMealIds.size} meals? This cannot be undone.`
+  );
+  if (!confirmDelete) return;
+
+  setStatus("Deleting meals...");
+  for (const id of state.selectedMealIds) {
+    await apiSend(`/api/meals/${id}`, "DELETE");
+  }
+  state.selectedMealIds.clear();
+  await loadMeals();
+  await loadWeek();
+  renderPlanner();
+  await loadShoppingList();
+  setMealForm();
+  setStatus("Meals deleted");
+}
+
+async function handleBulkTags() {
+  if (state.selectedMealIds.size === 0) return;
+  const raw = window.prompt(
+    "Enter tags to apply (comma separated). Leave blank to clear tags:"
+  );
+  if (raw === null) return;
+  const tags = raw
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+  setStatus("Updating tags...");
+  for (const id of state.selectedMealIds) {
+    const meal = state.meals.find((item) => item.id === id);
+    if (!meal) continue;
+    const payload = {
+      name: meal.name,
+      meal_type: getMealType(meal),
+      tags,
+      ingredients: meal.ingredients || [],
+      method_steps: meal.method_steps || [],
+      nutrition_unknown: meal.nutrition_unknown,
+      nutrition: meal.nutrition || {},
+      leftover_followup_meal_id: meal.leftover_followup_meal_id ?? null,
+      leftover_followup_offset_days: meal.leftover_followup_offset_days ?? 1,
+      leftover_followup_required: meal.leftover_followup_required ?? false,
+    };
+    await apiSend(`/api/meals/${id}`, "PUT", payload);
+  }
+  await loadMeals();
+  setStatus("Tags updated");
 }
 
 function addIngredientRow(values = {}) {
@@ -408,9 +854,43 @@ function addIngredientRow(values = {}) {
   quantity.dataset.field = "quantity";
 
   const unit = document.createElement("input");
-  unit.placeholder = "Unit";
+  unit.placeholder = "Custom unit";
   unit.value = values.unit ?? "";
   unit.dataset.field = "unit";
+  unit.className = "unit-custom hidden";
+
+  const unitSelect = document.createElement("select");
+  unitSelect.dataset.field = "unit_select";
+  ["", "g", "ml", "custom"].forEach((optionValue) => {
+    const option = document.createElement("option");
+    option.value = optionValue;
+    option.textContent =
+      optionValue === ""
+        ? "Unit"
+        : optionValue === "custom"
+          ? "Custom"
+          : optionValue;
+    unitSelect.appendChild(option);
+  });
+
+  const currentUnit = values.unit ?? "";
+  if (currentUnit === "g" || currentUnit === "ml" || currentUnit === "") {
+    unitSelect.value = currentUnit;
+    unit.classList.add("hidden");
+  } else if (currentUnit) {
+    unitSelect.value = "custom";
+    unit.classList.remove("hidden");
+  }
+
+  unitSelect.addEventListener("change", () => {
+    if (unitSelect.value === "custom") {
+      unit.classList.remove("hidden");
+      unit.focus();
+    } else {
+      unit.classList.add("hidden");
+      unit.value = "";
+    }
+  });
 
   const category = document.createElement("input");
   category.placeholder = "Category";
@@ -425,6 +905,7 @@ function addIngredientRow(values = {}) {
 
   row.appendChild(name);
   row.appendChild(quantity);
+  row.appendChild(unitSelect);
   row.appendChild(unit);
   row.appendChild(category);
   row.appendChild(remove);
@@ -470,6 +951,7 @@ async function handleMealSubmit(event) {
 
   const payload = {
     name,
+    meal_type: form.elements.meal_type.value,
     tags,
     ingredients,
     method_steps: methodSteps,
@@ -530,7 +1012,14 @@ function collectIngredients() {
   rows.forEach((row) => {
     const name = row.querySelector("[data-field='name']").value.trim();
     const quantityRaw = row.querySelector("[data-field='quantity']").value;
-    const unit = row.querySelector("[data-field='unit']").value.trim();
+    const unitSelect = row.querySelector("[data-field='unit_select']").value;
+    const unitCustom = row.querySelector("[data-field='unit']").value.trim();
+    const unit =
+      unitSelect === "custom"
+        ? unitCustom
+        : unitSelect === ""
+          ? null
+          : unitSelect;
     const category = row.querySelector("[data-field='category']").value.trim();
     if (!name) return;
     ingredients.push({
@@ -551,6 +1040,9 @@ function setActiveView(view) {
   Object.entries(elements.views).forEach(([key, section]) => {
     section.classList.toggle("hidden", key !== view);
   });
+  if (view !== "planner") {
+    closeMealPicker();
+  }
 }
 
 function setStatus(text) {
@@ -586,7 +1078,8 @@ function handleClearWeek() {
   if (!confirmClear) return;
   state.week.days = state.week.days.map((day) => ({
     ...day,
-    meal_id: null,
+    lunch_meal_id: null,
+    dinner_meal_id: null,
   }));
   renderPlanner();
   queueSaveWeek();
@@ -634,7 +1127,8 @@ function createEmptyWeek(weekStart) {
     week_start: weekStart,
     days: Array.from({ length: 7 }, (_, index) => ({
       day_index: index,
-      meal_id: null,
+      lunch_meal_id: null,
+      dinner_meal_id: null,
     })),
   };
 }
@@ -642,6 +1136,11 @@ function createEmptyWeek(weekStart) {
 function formatNumber(value) {
   if (!Number.isFinite(value)) return "0";
   return value % 1 === 0 ? value.toString() : value.toFixed(1);
+}
+
+function formatPercent(value) {
+  if (!Number.isFinite(value)) return "0";
+  return value < 1 && value > 0 ? value.toFixed(1) : value.toFixed(0);
 }
 
 function formatShoppingItem(item) {
@@ -663,6 +1162,35 @@ function copyShoppingList() {
       .catch(() => fallbackCopy(listText));
   } else {
     fallbackCopy(listText);
+  }
+}
+
+function initTheme() {
+  const stored = localStorage.getItem("theme");
+  if (stored === "dark" || stored === "light") {
+    setTheme(stored);
+    return;
+  }
+  const prefersDark =
+    window.matchMedia &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches;
+  setTheme(prefersDark ? "dark" : "light");
+}
+
+function toggleTheme() {
+  const current = document.body.dataset.theme === "dark" ? "dark" : "light";
+  const next = current === "dark" ? "light" : "dark";
+  setTheme(next);
+  localStorage.setItem("theme", next);
+}
+
+function setTheme(mode) {
+  if (mode === "dark") {
+    document.body.dataset.theme = "dark";
+    elements.themeToggle.textContent = "Light mode";
+  } else {
+    document.body.dataset.theme = "light";
+    elements.themeToggle.textContent = "Dark mode";
   }
 }
 
@@ -690,6 +1218,10 @@ function parseNumber(value) {
   if (value === "" || value === null || value === undefined) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getMealType(meal) {
+  return meal?.meal_type === "lunch" ? "lunch" : "dinner";
 }
 
 async function apiGet(path) {

@@ -29,6 +29,7 @@ function normalizeMealRow(row, ingredients) {
   return {
     id: row.id,
     name: row.name,
+    meal_type: row.meal_type ?? "dinner",
     tags: safeJsonParse(row.tags, []),
     method_steps: safeJsonParse(row.method_steps, []),
     nutrition_unknown: Boolean(row.nutrition_unknown),
@@ -57,6 +58,7 @@ function fetchMeal(id) {
 function parseMealPayload(body) {
   return {
     name: typeof body.name === "string" ? body.name.trim() : "",
+    meal_type: body.meal_type === "lunch" ? "lunch" : "dinner",
     tags: Array.isArray(body.tags) ? body.tags : [],
     method_steps: Array.isArray(body.method_steps) ? body.method_steps : [],
     nutrition_unknown: Boolean(body.nutrition_unknown),
@@ -109,6 +111,7 @@ app.post("/api/meals", (req, res) => {
   const insertMeal = db.prepare(
     `INSERT INTO meals (
       name,
+      meal_type,
       tags,
       method_steps,
       nutrition_unknown,
@@ -137,6 +140,7 @@ app.post("/api/meals", (req, res) => {
   const createMeal = db.transaction(() => {
     const info = insertMeal.run(
       payload.name,
+      payload.meal_type,
       JSON.stringify(payload.tags),
       JSON.stringify(payload.method_steps),
       payload.nutrition_unknown ? 1 : 0,
@@ -185,6 +189,7 @@ app.put("/api/meals/:id", (req, res) => {
   const updateMeal = db.prepare(
     `UPDATE meals SET
       name = ?,
+      meal_type = ?,
       tags = ?,
       method_steps = ?,
       nutrition_unknown = ?,
@@ -216,6 +221,7 @@ app.put("/api/meals/:id", (req, res) => {
   const update = db.transaction(() => {
     updateMeal.run(
       payload.name,
+      payload.meal_type,
       JSON.stringify(payload.tags),
       JSON.stringify(payload.method_steps),
       payload.nutrition_unknown ? 1 : 0,
@@ -260,13 +266,20 @@ app.delete("/api/meals/:id", (req, res) => {
 function buildWeekResponse(weekStart) {
   const rows = db
     .prepare(
-      "SELECT day_index, meal_id FROM week_meals WHERE week_start = ? ORDER BY day_index ASC"
+      "SELECT day_index, meal_type, meal_id FROM week_meals WHERE week_start = ? ORDER BY day_index ASC"
     )
     .all(weekStart);
-  const dayMap = new Map(rows.map((row) => [row.day_index, row.meal_id]));
+  const dayMap = new Map(
+    rows.map((row) => [`${row.day_index}_${row.meal_type}`, row.meal_id])
+  );
   const days = Array.from({ length: 7 }, (_, index) => ({
     day_index: index,
-    meal_id: dayMap.has(index) ? dayMap.get(index) : null,
+    lunch_meal_id: dayMap.has(`${index}_lunch`)
+      ? dayMap.get(`${index}_lunch`)
+      : null,
+    dinner_meal_id: dayMap.has(`${index}_dinner`)
+      ? dayMap.get(`${index}_dinner`)
+      : null,
   }));
   return { week_start: weekStart, days };
 }
@@ -286,9 +299,9 @@ app.put("/api/weeks/:week_start", (req, res) => {
   }
 
   const upsert = db.prepare(
-    `INSERT INTO week_meals (week_start, day_index, meal_id)
-     VALUES (?, ?, ?)
-     ON CONFLICT(week_start, day_index) DO UPDATE SET meal_id = excluded.meal_id`
+    `INSERT INTO week_meals (week_start, day_index, meal_type, meal_id)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(week_start, day_index, meal_type) DO UPDATE SET meal_id = excluded.meal_id`
   );
 
   const apply = db.transaction(() => {
@@ -297,11 +310,16 @@ app.put("/api/weeks/:week_start", (req, res) => {
       if (Number.isNaN(dayIndex) || dayIndex < 0 || dayIndex > 6) {
         throw new Error("Invalid day_index");
       }
-      const mealId =
-        entry.meal_id === null || entry.meal_id === undefined
+      const lunchMealId =
+        entry.lunch_meal_id === null || entry.lunch_meal_id === undefined
           ? null
-          : Number(entry.meal_id);
-      upsert.run(weekStart, dayIndex, mealId);
+          : Number(entry.lunch_meal_id);
+      const dinnerMealId =
+        entry.dinner_meal_id === null || entry.dinner_meal_id === undefined
+          ? null
+          : Number(entry.dinner_meal_id);
+      upsert.run(weekStart, dayIndex, "lunch", lunchMealId);
+      upsert.run(weekStart, dayIndex, "dinner", dinnerMealId);
     }
   });
 
