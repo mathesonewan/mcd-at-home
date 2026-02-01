@@ -1,1 +1,14 @@
 
+services:
+  mcd-at-home:
+    build: .
+    image: mcd-at-home:latest
+    container_name: mcd-at-home
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      - PORT=${APP_PORT:-3000}
+      - DB_PATH=/data/meals.db
+    volumes:
+      - ${DATA_DIR:-./data}:/data
+    restart: unless-stopped

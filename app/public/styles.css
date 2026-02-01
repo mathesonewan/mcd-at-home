@@ -882,6 +882,16 @@ body[data-theme="dark"] .meal-pill {
   color: var(--ink);
 }
 
+body[data-theme="dark"] .tag-chip {
+  background: #141a22;
+  color: var(--muted);
+}
+
+body[data-theme="dark"] .meal-pill {
+  background: #141a22;
+  color: var(--muted);
+}
+
 body[data-theme="dark"] .tag-chip.is-active {
   border-color: var(--accent);
   background: var(--accent);
