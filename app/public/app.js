@@ -442,31 +442,28 @@ function applyMealSelection(dayIndex, mealType, mealId) {
 function handleFollowup(dayIndex, mealType, mealId) {
   if (!mealId) return;
   const meal = state.meals.find((item) => item.id === mealId);
-  if (!meal || !meal.leftover_followup_meal_id) return;
+  const result = window.evaluateFollowup({
+    meal,
+    meals: state.meals,
+    mealType,
+    dayIndex,
+    weekDays: state.week.days,
+    dayNames,
+    getMealType,
+  });
 
-  const offset = meal.leftover_followup_offset_days || 1;
-  const targetIndex = dayIndex + offset;
-  if (targetIndex < 0 || targetIndex > 6) return;
-
-  const existing = state.week.days[targetIndex]?.[`${mealType}_meal_id`] ?? null;
-  const followupId = meal.leftover_followup_meal_id;
-  const followupMeal = state.meals.find((item) => item.id === followupId);
-  if (followupMeal && getMealType(followupMeal) !== mealType) {
+  if (result.type === "autofill") {
+    updateDayMeal(result.targetIndex, mealType, result.followupMealId);
+    if (result.message) {
+      setPlannerWarning(result.message);
+    }
+  } else if (result.type === "conflict" && result.message) {
+    setPlannerWarning(result.message);
+  } else if (result.type === "type_mismatch") {
     setPlannerWarning(
       `${meal.name} expects a ${mealType} follow-up, but the follow-up meal is ${getMealType(
-        followupMeal
+        state.meals.find((item) => item.id === result.followupMealId)
       )}.`
-    );
-    return;
-  }
-  if (!existing) {
-    updateDayMeal(targetIndex, mealType, followupId);
-    setPlannerWarning(
-      `Auto-filled ${followupMeal?.name ?? "follow-up meal"} on ${dayNames[targetIndex]}.`
-    );
-  } else if (existing !== followupId) {
-    setPlannerWarning(
-      `${meal.name} needs ${dayNames[targetIndex]} for leftovers, but it's already set.`
     );
   }
 }
@@ -477,6 +474,7 @@ function updateDayMeal(dayIndex, mealType, mealId) {
   if (!entry) return;
   entry[`${mealType}_meal_id`] = mealId;
 }
+
 
 function queueSaveWeek() {
   if (state.saveTimer) clearTimeout(state.saveTimer);
@@ -784,7 +782,7 @@ function renderIngredientGroups(ingredients) {
   });
 
   if (groups.size === 0) {
-    const block = createIngredientGroup("Uncategorised", [null]);
+    const block = createIngredientGroup("Uncategorised", []);
     container.appendChild(block);
     return;
   }
@@ -810,7 +808,9 @@ function createIngredientGroup(category, items) {
 
   const body = document.createElement("div");
   body.className = "ingredient-group-body";
-  items.forEach((ingredient) => addIngredientRow(ingredient, body));
+  items.forEach((ingredient) =>
+    addIngredientRow(ingredient || {}, body)
+  );
   if (items.length === 0) {
     addIngredientRow({}, body);
   }
@@ -1088,13 +1088,18 @@ async function handleMealSubmit(event) {
   };
 
   setStatus("Saving meal...");
+  let saved = null;
   if (state.currentMealId) {
-    await apiSend(`/api/meals/${state.currentMealId}`, "PUT", payload);
+    saved = await apiSend(`/api/meals/${state.currentMealId}`, "PUT", payload);
   } else {
-    const created = await apiSend("/api/meals", "POST", payload);
-    if (created?.id) {
-      state.currentMealId = created.id;
+    saved = await apiSend("/api/meals", "POST", payload);
+    if (saved?.id) {
+      state.currentMealId = saved.id;
     }
+  }
+  if (!saved) {
+    setStatus("Save failed");
+    return;
   }
 
   await loadMeals();

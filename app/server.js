@@ -7,22 +7,23 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
+app.use("/shared", express.static(path.join(__dirname, "shared")));
+
+const {
+  safeJsonParse,
+  normalizeIngredient,
+  parseMealPayload,
+} = require("./lib/meal-utils");
+const { buildWeekResponseFromRows } = require("./lib/week-utils");
+const { mergeShoppingItems } = require("./lib/shopping-utils");
+
+const { mealInsertSql } = require("./lib/sql-strings");
 
 const selectMealById = db.prepare("SELECT * FROM meals WHERE id = ?");
 const selectAllMeals = db.prepare("SELECT * FROM meals ORDER BY name ASC");
 const selectIngredientsByMealId = db.prepare(
   "SELECT id, name, quantity, unit, category FROM meal_ingredients WHERE meal_id = ? ORDER BY id ASC"
 );
-
-function safeJsonParse(value, fallback) {
-  if (!value) return fallback;
-  try {
-    const parsed = JSON.parse(value);
-    return parsed ?? fallback;
-  } catch (err) {
-    return fallback;
-  }
-}
 
 function normalizeMealRow(row, ingredients) {
   if (!row) return null;
@@ -55,50 +56,6 @@ function fetchMeal(id) {
   return normalizeMealRow(meal, ingredients);
 }
 
-function parseMealPayload(body) {
-  const nutritionInput = body.nutrition ?? {};
-  const sourceRaw =
-    nutritionInput.source ??
-    nutritionInput.nutrition_source ??
-    body.nutrition_source ??
-    null;
-  const normalizedNutrition = {
-    kcal: nutritionInput.kcal ?? nutritionInput.calories ?? null,
-    protein_g: nutritionInput.protein_g ?? null,
-    carbs_g: nutritionInput.carbs_g ?? nutritionInput.carbohydrates_g ?? null,
-    fat_g: nutritionInput.fat_g ?? null,
-    fibre_g: nutritionInput.fibre_g ?? nutritionInput.fiber_g ?? null,
-    source: typeof sourceRaw === "string" ? sourceRaw : null,
-  };
-
-  return {
-    name: typeof body.name === "string" ? body.name.trim() : "",
-    meal_type: body.meal_type === "lunch" ? "lunch" : "dinner",
-    tags: Array.isArray(body.tags) ? body.tags : [],
-    method_steps: Array.isArray(body.method_steps) ? body.method_steps : [],
-    nutrition_unknown: Boolean(body.nutrition_unknown),
-    nutrition: normalizedNutrition,
-    leftover_followup_meal_id: body.leftover_followup_meal_id ?? null,
-    leftover_followup_offset_days:
-      typeof body.leftover_followup_offset_days === "number"
-        ? body.leftover_followup_offset_days
-        : 1,
-    leftover_followup_required: Boolean(body.leftover_followup_required),
-    ingredients: Array.isArray(body.ingredients) ? body.ingredients : [],
-  };
-}
-
-function normalizeIngredient(input) {
-  return {
-    name: typeof input.name === "string" ? input.name.trim() : "",
-    quantity:
-      input.quantity === null || input.quantity === undefined
-        ? null
-        : Number(input.quantity),
-    unit: typeof input.unit === "string" ? input.unit.trim() : null,
-    category: typeof input.category === "string" ? input.category.trim() : null,
-  };
-}
 
 app.get("/api/meals", (req, res) => {
   const meals = selectAllMeals.all().map((row) => {
@@ -123,25 +80,7 @@ app.post("/api/meals", (req, res) => {
     return res.status(400).json({ error: "Meal name is required" });
   }
 
-  const insertMeal = db.prepare(
-    `INSERT INTO meals (
-      name,
-      meal_type,
-      tags,
-      method_steps,
-      nutrition_unknown,
-      nutrition_kcal,
-      nutrition_protein_g,
-      nutrition_carbs_g,
-      nutrition_fat_g,
-      nutrition_fibre_g,
-      nutrition_source,
-      leftover_followup_meal_id,
-      leftover_followup_offset_days,
-      leftover_followup_required,
-      updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
-  );
+  const insertMeal = db.prepare(mealInsertSql);
   const insertIngredient = db.prepare(
     `INSERT INTO meal_ingredients (
       meal_id,
@@ -195,25 +134,7 @@ app.post("/api/meals/import", (req, res) => {
     return res.status(400).json({ error: "Body must include meals array" });
   }
 
-  const insertMeal = db.prepare(
-    `INSERT INTO meals (
-      name,
-      meal_type,
-      tags,
-      method_steps,
-      nutrition_unknown,
-      nutrition_kcal,
-      nutrition_protein_g,
-      nutrition_carbs_g,
-      nutrition_fat_g,
-      nutrition_fibre_g,
-      nutrition_source,
-      leftover_followup_meal_id,
-      leftover_followup_offset_days,
-      leftover_followup_required,
-      updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
-  );
+  const insertMeal = db.prepare(mealInsertSql);
   const insertIngredient = db.prepare(
     `INSERT INTO meal_ingredients (
       meal_id,
@@ -364,19 +285,7 @@ function buildWeekResponse(weekStart) {
       "SELECT day_index, meal_type, meal_id FROM week_meals WHERE week_start = ? ORDER BY day_index ASC"
     )
     .all(weekStart);
-  const dayMap = new Map(
-    rows.map((row) => [`${row.day_index}_${row.meal_type}`, row.meal_id])
-  );
-  const days = Array.from({ length: 7 }, (_, index) => ({
-    day_index: index,
-    lunch_meal_id: dayMap.has(`${index}_lunch`)
-      ? dayMap.get(`${index}_lunch`)
-      : null,
-    dinner_meal_id: dayMap.has(`${index}_dinner`)
-      ? dayMap.get(`${index}_dinner`)
-      : null,
-  }));
-  return { week_start: weekStart, days };
+  return buildWeekResponseFromRows(weekStart, rows);
 }
 
 app.get("/api/weeks/:week_start", (req, res) => {
@@ -439,39 +348,7 @@ app.get("/api/weeks/:week_start/shopping-list", (req, res) => {
     )
     .all(weekStart);
 
-  const merged = new Map();
-  for (const row of rows) {
-    const key = `${row.name}__${row.unit ?? ""}`;
-    if (!merged.has(key)) {
-      merged.set(key, {
-        name: row.name,
-        unit: row.unit ?? null,
-        categories: new Set(row.category ? [row.category] : []),
-        total: 0,
-        hasUnknown: row.quantity === null || row.quantity === undefined,
-      });
-    }
-    const entry = merged.get(key);
-    if (row.category) entry.categories.add(row.category);
-    if (row.quantity === null || row.quantity === undefined) {
-      entry.hasUnknown = true;
-    } else if (!entry.hasUnknown) {
-      entry.total += Number(row.quantity);
-    }
-  }
-
-  const items = Array.from(merged.values()).map((entry) => {
-    const category =
-      entry.categories.size === 1
-        ? Array.from(entry.categories)[0]
-        : null;
-    return {
-      name: entry.name,
-      unit: entry.unit,
-      quantity: entry.hasUnknown ? null : entry.total,
-      category,
-    };
-  });
+  const items = mergeShoppingItems(rows);
 
   res.json({ week_start: weekStart, items });
 });
