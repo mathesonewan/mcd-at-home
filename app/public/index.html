@@ -135,6 +135,7 @@
               <h2>Meals</h2>
               <div class="actions">
                 <button class="ghost" id="new-meal">New meal</button>
+                <button class="ghost" id="upload-meals">Upload JSON</button>
               </div>
             </div>
             <div class="bulk-actions">
@@ -180,6 +181,14 @@
                   <button class="ghost" type="button" id="add-ingredient">
                     Add ingredient
                   </button>
+                </div>
+                <div class="ingredient-headers">
+                  <span>Name</span>
+                  <span>Qty</span>
+                  <span>Unit</span>
+                  <span class="custom-only">Custom unit</span>
+                  <span>Category</span>
+                  <span></span>
                 </div>
                 <div id="ingredients"></div>
               </div>
@@ -258,6 +267,37 @@
         </div>
       </section>
     </main>
+
+    <div class="modal-backdrop hidden" id="json-upload-modal">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <div>
+            <p class="modal-eyebrow">Meals</p>
+            <h3>Paste JSON</h3>
+          </div>
+          <button class="ghost" type="button" id="json-upload-close">
+            Close
+          </button>
+        </div>
+        <p class="subtle">
+          Paste an object containing a <strong>meals</strong> array. See
+          <code>MEAL_IMPORT_SCHEMA.md</code> for details.
+        </p>
+        <textarea
+          id="json-upload-text"
+          rows="12"
+          placeholder='{"meals":[{"name":"Caprese Toast","meal_type":"lunch"}]}'
+        ></textarea>
+        <div class="modal-actions">
+          <button class="ghost" type="button" id="json-upload-clear">
+            Clear
+          </button>
+          <button class="primary" type="button" id="json-upload-submit">
+            Import meals
+          </button>
+        </div>
+      </div>
+    </div>
 
     <script src="app.js"></script>
   </body>

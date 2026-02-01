@@ -665,6 +665,22 @@ textarea {
   font-weight: 600;
 }
 
+.ingredient-headers {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.6fr) 90px 110px minmax(140px, 0.8fr) minmax(160px, 1fr) 96px;
+  gap: 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 0 2px;
+}
+
+.ingredient-headers .custom-only.is-hidden {
+  visibility: hidden;
+}
+
 .inline {
   display: inline-flex;
   align-items: center;
@@ -675,17 +691,66 @@ textarea {
 
 .ingredient-row {
   display: grid;
-  grid-template-columns: 1.4fr 0.6fr 0.6fr 0.6fr 0.8fr auto;
+  grid-template-columns: minmax(240px, 1.6fr) 90px 110px minmax(140px, 0.8fr) minmax(160px, 1fr) 96px;
   gap: 8px;
 }
 
-.unit-custom.hidden {
-  display: none;
+.ingredient-group {
+  display: grid;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #d7dbe2;
+}
+
+.ingredient-group:last-of-type {
+  border-bottom: none;
+}
+
+.ingredient-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #f0f3f7;
+  border: 1px solid #d7dbe2;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ingredient-group-header::after {
+  content: "▾";
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ingredient-group-header[aria-expanded="false"]::after {
+  content: "▸";
+}
+
+.ingredient-group-body {
+  display: grid;
+  gap: 8px;
+}
+
+.unit-custom.is-hidden {
+  visibility: hidden;
+}
+
+.ingredient-row input,
+.ingredient-row select {
+  width: 100%;
 }
 
 .ingredient-row button {
   border-radius: 10px;
   padding: 8px 10px;
+  justify-self: end;
 }
 
 .nutrition-grid {
@@ -705,6 +770,55 @@ textarea {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 18, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+
+.modal-panel {
+  width: min(720px, 100%);
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 30px 60px rgba(16, 20, 24, 0.3);
+  border: 1px solid #d7dbe2;
+  display: grid;
+  gap: 16px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+body[data-theme="dark"] .modal-panel {
+  background: rgba(14, 18, 24, 0.98);
+  border-color: #2a3342;
 }
 
 body[data-theme="dark"] {
@@ -794,6 +908,15 @@ body[data-theme="dark"] .meal-picker-empty {
   color: var(--muted);
 }
 
+body[data-theme="dark"] .ingredient-group {
+  border-color: #2a3342;
+}
+
+body[data-theme="dark"] .ingredient-group-header {
+  background: #141a22;
+  border-color: #2a3342;
+}
+
 body[data-theme="dark"] .macro-chart {
   border-color: #0f141b;
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
@@ -826,6 +949,10 @@ body[data-theme="dark"] .macro-chart {
 
   .ingredient-row {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .ingredient-headers {
+    display: none;
   }
 
   .macro-split-body {

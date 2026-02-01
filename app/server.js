@@ -56,13 +56,28 @@ function fetchMeal(id) {
 }
 
 function parseMealPayload(body) {
+  const nutritionInput = body.nutrition ?? {};
+  const sourceRaw =
+    nutritionInput.source ??
+    nutritionInput.nutrition_source ??
+    body.nutrition_source ??
+    null;
+  const normalizedNutrition = {
+    kcal: nutritionInput.kcal ?? nutritionInput.calories ?? null,
+    protein_g: nutritionInput.protein_g ?? null,
+    carbs_g: nutritionInput.carbs_g ?? nutritionInput.carbohydrates_g ?? null,
+    fat_g: nutritionInput.fat_g ?? null,
+    fibre_g: nutritionInput.fibre_g ?? nutritionInput.fiber_g ?? null,
+    source: typeof sourceRaw === "string" ? sourceRaw : null,
+  };
+
   return {
     name: typeof body.name === "string" ? body.name.trim() : "",
     meal_type: body.meal_type === "lunch" ? "lunch" : "dinner",
     tags: Array.isArray(body.tags) ? body.tags : [],
     method_steps: Array.isArray(body.method_steps) ? body.method_steps : [],
     nutrition_unknown: Boolean(body.nutrition_unknown),
-    nutrition: body.nutrition ?? {},
+    nutrition: normalizedNutrition,
     leftover_followup_meal_id: body.leftover_followup_meal_id ?? null,
     leftover_followup_offset_days:
       typeof body.leftover_followup_offset_days === "number"
@@ -172,6 +187,86 @@ app.post("/api/meals", (req, res) => {
   const mealId = createMeal();
   const meal = fetchMeal(mealId);
   res.status(201).json(meal);
+});
+
+app.post("/api/meals/import", (req, res) => {
+  const meals = Array.isArray(req.body?.meals) ? req.body.meals : null;
+  if (!meals) {
+    return res.status(400).json({ error: "Body must include meals array" });
+  }
+
+  const insertMeal = db.prepare(
+    `INSERT INTO meals (
+      name,
+      meal_type,
+      tags,
+      method_steps,
+      nutrition_unknown,
+      nutrition_kcal,
+      nutrition_protein_g,
+      nutrition_carbs_g,
+      nutrition_fat_g,
+      nutrition_fibre_g,
+      nutrition_source,
+      leftover_followup_meal_id,
+      leftover_followup_offset_days,
+      leftover_followup_required,
+      updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+  );
+  const insertIngredient = db.prepare(
+    `INSERT INTO meal_ingredients (
+      meal_id,
+      name,
+      quantity,
+      unit,
+      category
+    ) VALUES (?, ?, ?, ?, ?)`
+  );
+
+  const insertMeals = db.transaction(() => {
+    const created = [];
+    for (const item of meals) {
+      const payload = parseMealPayload(item ?? {});
+      if (!payload.name) continue;
+
+      const info = insertMeal.run(
+        payload.name,
+        payload.meal_type,
+        JSON.stringify(payload.tags),
+        JSON.stringify(payload.method_steps),
+        payload.nutrition_unknown ? 1 : 0,
+        payload.nutrition.kcal ?? null,
+        payload.nutrition.protein_g ?? null,
+        payload.nutrition.carbs_g ?? null,
+        payload.nutrition.fat_g ?? null,
+        payload.nutrition.fibre_g ?? null,
+        payload.nutrition.source ?? null,
+        payload.leftover_followup_meal_id,
+        payload.leftover_followup_offset_days,
+        payload.leftover_followup_required ? 1 : 0
+      );
+
+      const mealId = info.lastInsertRowid;
+      for (const ingredient of payload.ingredients.map(normalizeIngredient)) {
+        if (!ingredient.name) continue;
+        insertIngredient.run(
+          mealId,
+          ingredient.name,
+          ingredient.quantity,
+          ingredient.unit,
+          ingredient.category
+        );
+      }
+
+      created.push(mealId);
+    }
+    return created;
+  });
+
+  const createdIds = insertMeals();
+  const createdMeals = createdIds.map((id) => fetchMeal(id)).filter(Boolean);
+  res.status(201).json({ created: createdMeals.length, meals: createdMeals });
 });
 
 app.put("/api/meals/:id", (req, res) => {

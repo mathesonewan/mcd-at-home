@@ -58,6 +58,7 @@ const elements = {
   meals: {
     list: document.getElementById("meals-list"),
     newButton: document.getElementById("new-meal"),
+    uploadButton: document.getElementById("upload-meals"),
     form: document.getElementById("meal-form"),
     title: document.getElementById("meal-editor-title"),
     delete: document.getElementById("delete-meal"),
@@ -70,6 +71,13 @@ const elements = {
     bulkCount: document.getElementById("bulk-count"),
     bulkTags: document.getElementById("bulk-tags"),
     bulkDelete: document.getElementById("bulk-delete"),
+  },
+  jsonUpload: {
+    modal: document.getElementById("json-upload-modal"),
+    close: document.getElementById("json-upload-close"),
+    clear: document.getElementById("json-upload-clear"),
+    submit: document.getElementById("json-upload-submit"),
+    text: document.getElementById("json-upload-text"),
   },
 };
 
@@ -119,9 +127,22 @@ function bindThemeControls() {
 
 function bindMealForm() {
   elements.meals.newButton.addEventListener("click", () => setMealForm());
-  elements.meals.addIngredient.addEventListener("click", () =>
-    addIngredientRow()
-  );
+  elements.meals.uploadButton.addEventListener("click", openJsonUpload);
+  elements.jsonUpload.close.addEventListener("click", closeJsonUpload);
+  elements.jsonUpload.clear.addEventListener("click", () => {
+    elements.jsonUpload.text.value = "";
+  });
+  elements.jsonUpload.submit.addEventListener("click", handleMealUpload);
+  elements.meals.addIngredient.addEventListener("click", () => {
+    const lastGroup = elements.meals.ingredients.querySelector(
+      ".ingredient-group:last-of-type .ingredient-group-body"
+    );
+    if (lastGroup) {
+      addIngredientRow({}, lastGroup);
+      return;
+    }
+    renderIngredientGroups([]);
+  });
   elements.meals.form.addEventListener("submit", handleMealSubmit);
   elements.meals.delete.addEventListener("click", handleMealDelete);
   elements.meals.nutritionUnknown.addEventListener("change", toggleNutrition);
@@ -732,12 +753,7 @@ function setMealForm(meal = null) {
     form.elements.followup_required.checked = Boolean(
       meal.leftover_followup_required
     );
-    (meal.ingredients || []).forEach((ingredient) =>
-      addIngredientRow(ingredient)
-    );
-    if ((meal.ingredients || []).length === 0) {
-      addIngredientRow();
-    }
+    renderIngredientGroups(meal.ingredients || []);
     elements.meals.delete.disabled = false;
   } else {
     state.currentMealId = null;
@@ -747,13 +763,66 @@ function setMealForm(meal = null) {
     form.elements.followup_offset.value = 1;
     form.elements.followup_required.checked = false;
     elements.meals.nutritionUnknown.checked = false;
-    addIngredientRow();
+    renderIngredientGroups([]);
     elements.meals.delete.disabled = true;
   }
 
   renderFollowupOptions();
   toggleNutrition();
   renderMealsList();
+  updateCustomHeaderVisibility();
+}
+
+function renderIngredientGroups(ingredients) {
+  const container = elements.meals.ingredients;
+  container.innerHTML = "";
+  const groups = new Map();
+  (ingredients || []).forEach((ingredient) => {
+    const key = ingredient.category ? ingredient.category.trim() : "Uncategorised";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(ingredient);
+  });
+
+  if (groups.size === 0) {
+    const block = createIngredientGroup("Uncategorised", [null]);
+    container.appendChild(block);
+    return;
+  }
+
+  Array.from(groups.entries())
+    .sort(([a], [b]) => a.localeCompare(b, "en", { sensitivity: "base" }))
+    .forEach(([category, items]) => {
+      const block = createIngredientGroup(category, items);
+      container.appendChild(block);
+    });
+}
+
+function createIngredientGroup(category, items) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "ingredient-group";
+
+  const header = document.createElement("button");
+  header.type = "button";
+  header.className = "ingredient-group-header";
+  header.setAttribute("aria-expanded", "true");
+  header.textContent = `${category} (${items.length})`;
+  wrapper.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "ingredient-group-body";
+  items.forEach((ingredient) => addIngredientRow(ingredient, body));
+  if (items.length === 0) {
+    addIngredientRow({}, body);
+  }
+  wrapper.appendChild(body);
+
+  header.addEventListener("click", () => {
+    const isOpen = header.getAttribute("aria-expanded") === "true";
+    header.setAttribute("aria-expanded", isOpen ? "false" : "true");
+    body.classList.toggle("hidden", isOpen);
+  });
+
+  return wrapper;
 }
 
 function updateBulkUI() {
@@ -763,6 +832,15 @@ function updateBulkUI() {
   elements.meals.selectAll.checked = total > 0 && selectedCount === total;
   elements.meals.bulkDelete.disabled = selectedCount === 0;
   elements.meals.bulkTags.disabled = selectedCount === 0;
+}
+
+function updateCustomHeaderVisibility() {
+  const header = document.querySelector(".ingredient-headers .custom-only");
+  if (!header) return;
+  const anyCustom = Array.from(
+    elements.meals.ingredients.querySelectorAll("[data-field='unit_select']")
+  ).some((select) => select.value === "custom");
+  header.classList.toggle("is-hidden", !anyCustom);
 }
 
 function pruneSelectedMeals() {
@@ -834,7 +912,41 @@ async function handleBulkTags() {
   setStatus("Tags updated");
 }
 
-function addIngredientRow(values = {}) {
+function openJsonUpload() {
+  elements.jsonUpload.modal.classList.remove("hidden");
+  elements.jsonUpload.text.focus();
+}
+
+function closeJsonUpload() {
+  elements.jsonUpload.modal.classList.add("hidden");
+}
+
+async function handleMealUpload() {
+  const raw = elements.jsonUpload.text.value.trim();
+  if (!raw) return;
+
+  try {
+    const payload = JSON.parse(raw);
+    if (!payload || !Array.isArray(payload.meals)) {
+      window.alert("Invalid JSON. Expected { meals: [...] }.");
+      return;
+    }
+    setStatus("Importing meals...");
+    const result = await apiSend("/api/meals/import", "POST", payload);
+    if (!result) return;
+    await loadMeals();
+    await loadWeek();
+    renderPlanner();
+    await loadShoppingList();
+    setStatus(`Imported ${result.created} meals`);
+    closeJsonUpload();
+  } catch (err) {
+    console.error(err);
+    window.alert("Could not parse that JSON.");
+  }
+}
+
+function addIngredientRow(values = {}, target = null) {
   const row = document.createElement("div");
   row.className = "ingredient-row";
 
@@ -857,11 +969,11 @@ function addIngredientRow(values = {}) {
   unit.placeholder = "Custom unit";
   unit.value = values.unit ?? "";
   unit.dataset.field = "unit";
-  unit.className = "unit-custom hidden";
+  unit.className = "unit-custom is-hidden";
 
   const unitSelect = document.createElement("select");
   unitSelect.dataset.field = "unit_select";
-  ["", "g", "ml", "custom"].forEach((optionValue) => {
+  ["", "g", "ml", "tbsp", "tsp", "custom"].forEach((optionValue) => {
     const option = document.createElement("option");
     option.value = optionValue;
     option.textContent =
@@ -874,34 +986,41 @@ function addIngredientRow(values = {}) {
   });
 
   const currentUnit = values.unit ?? "";
-  if (currentUnit === "g" || currentUnit === "ml" || currentUnit === "") {
+  if (
+    currentUnit === "g" ||
+    currentUnit === "ml" ||
+    currentUnit === "tbsp" ||
+    currentUnit === "tsp" ||
+    currentUnit === ""
+  ) {
     unitSelect.value = currentUnit;
-    unit.classList.add("hidden");
+    unit.classList.add("is-hidden");
   } else if (currentUnit) {
     unitSelect.value = "custom";
-    unit.classList.remove("hidden");
+    unit.classList.remove("is-hidden");
   }
 
   unitSelect.addEventListener("change", () => {
     if (unitSelect.value === "custom") {
-      unit.classList.remove("hidden");
+      unit.classList.remove("is-hidden");
       unit.focus();
     } else {
-      unit.classList.add("hidden");
+      unit.classList.add("is-hidden");
       unit.value = "";
     }
+    updateCustomHeaderVisibility();
   });
-
-  const category = document.createElement("input");
-  category.placeholder = "Category";
-  category.value = values.category ?? "";
-  category.dataset.field = "category";
 
   const remove = document.createElement("button");
   remove.type = "button";
   remove.className = "ghost";
   remove.textContent = "Remove";
   remove.addEventListener("click", () => row.remove());
+
+  const category = document.createElement("input");
+  category.placeholder = "Category";
+  category.value = values.category ?? "";
+  category.dataset.field = "category";
 
   row.appendChild(name);
   row.appendChild(quantity);
@@ -910,7 +1029,8 @@ function addIngredientRow(values = {}) {
   row.appendChild(category);
   row.appendChild(remove);
 
-  elements.meals.ingredients.appendChild(row);
+  (target || elements.meals.ingredients).appendChild(row);
+  updateCustomHeaderVisibility();
 }
 
 function toggleNutrition() {
@@ -1020,13 +1140,14 @@ function collectIngredients() {
         : unitSelect === ""
           ? null
           : unitSelect;
-    const category = row.querySelector("[data-field='category']").value.trim();
+    const category =
+      row.querySelector("[data-field='category']").value.trim() || null;
     if (!name) return;
     ingredients.push({
       name,
       quantity: quantityRaw === "" ? null : parseFloat(quantityRaw),
       unit: unit || null,
-      category: category || null,
+      category,
     });
   });
   return ingredients;

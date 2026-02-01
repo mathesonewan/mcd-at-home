@@ -126,6 +126,14 @@ The repository uses a flat root layout. app/ contains all runtime code. data/ is
 
 ---
 
+## Meal import (JSON)
+
+You can bulk import meals from the Meals screen using a JSON file.
+
+See `MEAL_IMPORT_SCHEMA.md` for the schema and an example payload.
+
+---
+
 ## Configuration
 
 All configuration is via environment variables.
