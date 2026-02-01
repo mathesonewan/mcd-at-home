@@ -42,6 +42,19 @@ const elements = {
     fibre: document.getElementById("total-fibre"),
     note: document.getElementById("nutrition-note"),
     macroChart: document.getElementById("macro-chart"),
+    macroDailyGrid: document.getElementById("macro-daily-grid"),
+    weekly: {
+      protein: document.getElementById("weekly-protein"),
+      carbs: document.getElementById("weekly-carbs"),
+      fat: document.getElementById("weekly-fat"),
+      fibre: document.getElementById("weekly-fibre"),
+    },
+    dailyAvg: {
+      protein: document.getElementById("avg-protein"),
+      carbs: document.getElementById("avg-carbs"),
+      fat: document.getElementById("avg-fat"),
+      fibre: document.getElementById("avg-fibre"),
+    },
     macro: {
       protein: document.getElementById("macro-protein"),
       carbs: document.getElementById("macro-carbs"),
@@ -200,7 +213,25 @@ function renderPlanner() {
 
     const rowHeader = document.createElement("div");
     rowHeader.className = "planner-row-header";
-    rowHeader.textContent = mealType.label;
+    const rowTitle = document.createElement("span");
+    rowTitle.textContent = mealType.label;
+    rowHeader.appendChild(rowTitle);
+
+    const rowDivider = document.createElement("span");
+    rowDivider.className = "planner-row-divider";
+    rowHeader.appendChild(rowDivider);
+
+    const rowActions = document.createElement("div");
+    rowActions.className = "planner-row-actions";
+    const randomButton = document.createElement("button");
+    randomButton.type = "button";
+    randomButton.className = "ghost";
+    randomButton.textContent = "Random week";
+    randomButton.addEventListener("click", () =>
+      randomizeWeekMeals(mealType.key)
+    );
+    rowActions.appendChild(randomButton);
+    rowHeader.appendChild(rowActions);
     row.appendChild(rowHeader);
 
     const pickerPanel = document.createElement("div");
@@ -475,6 +506,26 @@ function updateDayMeal(dayIndex, mealType, mealId) {
   entry[`${mealType}_meal_id`] = mealId;
 }
 
+function randomizeWeekMeals(mealType) {
+  if (!state.week) return;
+  const mealsForType = state.meals.filter(
+    (meal) => getMealType(meal) === mealType
+  );
+  if (mealsForType.length === 0) {
+    setPlannerWarning(`No ${mealType} meals available to randomize.`);
+    return;
+  }
+  const mealIds = mealsForType.map((meal) => meal.id);
+  setPlannerWarning("");
+  state.mealPicker = null;
+  state.week.days.forEach((day) => {
+    const randomId = mealIds[Math.floor(Math.random() * mealIds.length)];
+    day[`${mealType}_meal_id`] = randomId;
+  });
+  renderPlanner();
+  queueSaveWeek();
+}
+
 
 function queueSaveWeek() {
   if (state.saveTimer) clearTimeout(state.saveTimer);
@@ -533,6 +584,7 @@ function renderNutritionTotals() {
   elements.totals.fibre.textContent = `${formatNumber(totals.fibre)} g`;
 
   renderMacroSplit(totals);
+  renderMacroDaily(totals);
 
   if (totals.knownCount < 14) {
     elements.totals.note.textContent = `Totals based on ${totals.knownCount} of 14 meals.`;
@@ -616,6 +668,77 @@ function renderMacroSplit(totals) {
       fatPct
     )}%, Fibre ${formatPercent(fibrePct)}%`
   );
+}
+
+function renderMacroDaily(totals) {
+  const grid = elements.totals.macroDailyGrid;
+  if (!grid || !state.week) return;
+  grid.innerHTML = "";
+
+  const weekDates = getWeekDates(state.weekStart);
+  const mealById = new Map(state.meals.map((meal) => [meal.id, meal]));
+  const perDay = state.week.days.map((day) => {
+    const stats = { protein: 0, carbs: 0, fat: 0, fibre: 0, known: false };
+    ["lunch_meal_id", "dinner_meal_id"].forEach((slot) => {
+      const mealId = day[slot];
+      if (!mealId) return;
+      const meal = mealById.get(mealId);
+      if (!meal || meal.nutrition_unknown) return;
+      const nutrition = meal.nutrition || {};
+      stats.known = true;
+      stats.protein += Number(nutrition.protein_g || 0);
+      stats.carbs += Number(nutrition.carbs_g || 0);
+      stats.fat += Number(nutrition.fat_g || 0);
+      stats.fibre += Number(nutrition.fibre_g || 0);
+    });
+    return stats;
+  });
+
+  const addCell = (text, className) => {
+    const cell = document.createElement("div");
+    cell.className = className;
+    cell.textContent = text;
+    grid.appendChild(cell);
+  };
+
+  addCell("", "macro-day-label");
+  dayNames.forEach((name, index) => {
+    addCell(
+      `${name.slice(0, 3)} ${formatShortDate(weekDates[index])}`,
+      "macro-day-header"
+    );
+  });
+
+  const rows = [
+    ["Protein", "protein"],
+    ["Carbs", "carbs"],
+    ["Fat", "fat"],
+    ["Fibre", "fibre"],
+  ];
+
+  rows.forEach(([label, key]) => {
+    addCell(label, "macro-day-label");
+    perDay.forEach((day) => {
+      const value = day.known ? `${formatNumber(day[key])} g` : "—";
+      addCell(value, "macro-day-value");
+    });
+  });
+
+  elements.totals.weekly.protein.textContent = `${formatNumber(totals.protein)} g`;
+  elements.totals.weekly.carbs.textContent = `${formatNumber(totals.carbs)} g`;
+  elements.totals.weekly.fat.textContent = `${formatNumber(totals.fat)} g`;
+  elements.totals.weekly.fibre.textContent = `${formatNumber(totals.fibre)} g`;
+
+  const avg = {
+    protein: totals.protein / 7,
+    carbs: totals.carbs / 7,
+    fat: totals.fat / 7,
+    fibre: totals.fibre / 7,
+  };
+  elements.totals.dailyAvg.protein.textContent = `${formatNumber(avg.protein)} g`;
+  elements.totals.dailyAvg.carbs.textContent = `${formatNumber(avg.carbs)} g`;
+  elements.totals.dailyAvg.fat.textContent = `${formatNumber(avg.fat)} g`;
+  elements.totals.dailyAvg.fibre.textContent = `${formatNumber(avg.fibre)} g`;
 }
 
 function renderShoppingList(items) {

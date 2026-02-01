@@ -243,7 +243,7 @@ button {
 .planner-row-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
@@ -251,12 +251,16 @@ button {
   font-size: 12px;
 }
 
-.planner-row-header::after {
-  content: "";
+.planner-row-divider {
   flex: 1;
   height: 1px;
   background: #d7dbe2;
-  margin-left: 12px;
+}
+
+.planner-row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .planner-card {
@@ -486,6 +490,98 @@ button {
 .macro-legend {
   display: grid;
   gap: 10px;
+}
+
+.macro-daily {
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid #efe1d1;
+  padding-top: 14px;
+}
+
+.macro-daily-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.macro-daily-grid {
+  display: grid;
+  grid-template-columns: 110px repeat(7, minmax(90px, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+
+.macro-day-header {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.macro-day-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.macro-day-value {
+  font-weight: 600;
+  background: var(--paper);
+  border-radius: 10px;
+  padding: 6px 8px;
+  text-align: center;
+  border: 1px solid #dde2ea;
+}
+
+.macro-daily-divider {
+  height: 1px;
+  background: #d7dbe2;
+}
+
+.macro-totals {
+  display: grid;
+  gap: 8px;
+}
+
+.macro-total-row {
+  display: grid;
+  grid-template-columns: 110px repeat(4, minmax(90px, 1fr));
+  gap: 8px;
+  align-items: center;
+  font-weight: 600;
+}
+
+.macro-total-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.macro-total-value {
+  background: var(--paper);
+  border-radius: 10px;
+  padding: 6px 8px;
+  text-align: center;
+  border: 1px solid #dde2ea;
+}
+
+.macro-total-legend {
+  display: grid;
+  grid-template-columns: 110px repeat(4, minmax(90px, 1fr));
+  gap: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  font-weight: 600;
+  opacity: 0.8;
 }
 
 .macro-item {
@@ -871,7 +967,7 @@ body[data-theme="dark"] .planner-card {
   border-color: #263042;
 }
 
-body[data-theme="dark"] .planner-row-header::after {
+body[data-theme="dark"] .planner-row-divider {
   background: #2a3342;
 }
 
@@ -932,6 +1028,16 @@ body[data-theme="dark"] .macro-chart {
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
 }
 
+body[data-theme="dark"] .macro-day-value,
+body[data-theme="dark"] .macro-total-value {
+  background: #141a22;
+  border-color: #263042;
+}
+
+body[data-theme="dark"] .macro-daily-divider {
+  background: #2a3342;
+}
+
 @media (max-width: 900px) {
   .meals-layout {
     grid-template-columns: 1fr;
@@ -968,5 +1074,14 @@ body[data-theme="dark"] .macro-chart {
   .macro-split-body {
     grid-template-columns: 1fr;
     justify-items: start;
+  }
+
+  .macro-daily-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .macro-total-row,
+  .macro-total-legend {
+    grid-template-columns: 1fr;
   }
 }
